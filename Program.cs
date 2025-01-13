@@ -410,7 +410,7 @@ public static class Program
         }
         Console.WriteLine("Save into file...");
         File.WriteAllText("./import.sql", importSqlString);
-        Console.WriteLine("READY ✔");
+        Console.WriteLine("READY!");
         }
         catch (MySqlException e)
         {
