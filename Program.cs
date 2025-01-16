@@ -36,11 +36,11 @@ public static class Program
         var filePath = $"./config.json";
         if (!File.Exists(filePath))
         {
-            File.WriteAllText(filePath, JsonSerializer.Serialize(new Config(), options: new JsonSerializerOptions() { WriteIndented = true, AllowTrailingCommas = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All, UnicodeRanges.Cyrillic), }));
+            File.WriteAllText(filePath, JsonSerializer.Serialize(new Config(), options: new JsonSerializerOptions() { WriteIndented = true, AllowTrailingCommas = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All, UnicodeRanges.Cyrillic), ReadCommentHandling = JsonCommentHandling.Skip }));
         }
         using var streamReader = new StreamReader(filePath);
         var json = streamReader.ReadToEnd();
-        var config = JsonSerializer.Deserialize<Config>(json);
+        var config = JsonSerializer.Deserialize<Config>(json, options: new JsonSerializerOptions() { WriteIndented = true, AllowTrailingCommas = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All, UnicodeRanges.Cyrillic), ReadCommentHandling = JsonCommentHandling.Skip });
         Config = config!;
     }
 
@@ -625,8 +625,7 @@ public static class Program
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
 
     insert into iks_admins(steam_id, name, flags, immunity, created_at, updated_at)
-    select 'CONSOLE', 'CONSOLE', null, 0, unix_timestamp(), unix_timestamp()
-    where not exists (select 1 from iks_admins where steam_id = 'CONSOLE');
+    select 'CONSOLE', 'CONSOLE', null, 0, unix_timestamp(), unix_timestamp();
 
     create table if not exists iks_admin_to_server(
         id int not null auto_increment primary key,
