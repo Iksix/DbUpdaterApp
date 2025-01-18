@@ -354,7 +354,15 @@ public static class Program
                 deleted_at = admin.DeletedAt,
             }) + "\n";
         }
-        Console.WriteLine("Insert admins...");
+        Console.WriteLine("Construct AdminToServer SQL");
+        foreach (var ats in adminToServers)
+        {
+            importSqlString += GetSqlWithParameters(@"
+            insert into iks_admin_to_server(admin_id, server_id)
+            values
+            (@adminId, @serverId)
+            ", new {adminId = ats.AdminId, serverId = ats.ServerId}) + "\n";
+        }
 
         Console.WriteLine("BansSql construct...");
         foreach (var ban in newBans)
