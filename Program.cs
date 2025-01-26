@@ -108,24 +108,144 @@ public static class Program
     {
         try
         {
-        Console.WriteLine("Start updating");
-        Console.WriteLine(DBConnString);
-        await using var conn = new MySqlConnection(DBConnString);
-        await conn.OpenAsync();
-        Console.WriteLine("Rename old tables...");
-        await conn.QueryAsync(@"
+            /*
+            
+            rename table old_iks_admins to iks_admins;
+            rename table old_iks_gags to iks_gags;
+            rename table old_iks_mutes to iks_mutes;
+            rename table old_iks_groups to iks_groups;
+            rename table old_iks_bans to iks_bans;
+            */
+        var importSqlString = @"
         rename table iks_admins to old_iks_admins;
         rename table iks_gags to old_iks_gags;
         rename table iks_mutes to old_iks_mutes;
         rename table iks_groups to old_iks_groups;
         rename table iks_bans to old_iks_bans;
-        ");
-        Console.WriteLine("Init new tables...");
-        await Init();
-        Console.WriteLine("Add serevers to base");
+        create table if not exists iks_servers(
+        id int not null unique,
+        ip varchar(32) not null comment 'ip:port',
+        name varchar(64) not null,
+        rcon varchar(128) default null,
+        created_at int not null,
+        updated_at int not null,
+        deleted_at int default null
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+    create table if not exists iks_groups(
+        id int not null auto_increment primary key,
+        name varchar(64) not null unique,
+        flags varchar(32) not null,
+        immunity int not null,
+        comment varchar(255) default null
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+    create table if not exists iks_admins(
+        id int not null auto_increment primary key,
+        steam_id varchar(17) not null,
+        name varchar(64) not null,
+        flags varchar(32) default null,
+        immunity int default null,
+        group_id int default null,
+        discord varchar(64) default null,
+        vk varchar(64) default null,
+        is_disabled int(1) not null default 0,
+        end_at int null,
+        created_at int not null,
+        updated_at int not null,
+        deleted_at int default null,
+        foreign key (group_id) references iks_groups(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+    insert into iks_admins(steam_id, name, flags, immunity, created_at, updated_at)
+    select 'CONSOLE', 'CONSOLE', null, 0, unix_timestamp(), unix_timestamp();
+
+    create table if not exists iks_admin_to_server(
+        id int not null auto_increment primary key,
+        admin_id int not null,
+        server_id int not null,
+        foreign key (admin_id) references iks_admins(id),
+        foreign key (server_id) references iks_servers(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+    create table if not exists iks_comms(
+        id int not null auto_increment primary key,
+        steam_id bigint not null,
+        ip varchar(32),
+        name varchar(128),
+        mute_type int not null comment '0 - voice(mute), 1 - chat(gag), 2 - both(silence)', 
+        duration int not null,
+        reason varchar(128) not null,
+        server_id int default null,
+        admin_id int not null,
+        unbanned_by int default null,
+        unban_reason varchar(128) default null,
+        created_at int not null,
+        end_at int not null,
+        updated_at int not null,
+        deleted_at int default null,
+        foreign key (admin_id) references iks_admins(id),
+        foreign key (unbanned_by) references iks_admins(id),
+        foreign key (server_id) references iks_servers(id),
+        index `idx_steam_id` (`steam_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+    create table if not exists iks_bans(
+        id int not null auto_increment primary key,
+        steam_id bigint,
+        ip varchar(32),
+        name varchar(128),
+        duration int not null,
+        reason varchar(128) not null,
+        ban_type tinyint not null default 0 comment '0 - SteamId, 1 - Ip, 2 - Both',
+        server_id int default null,
+        admin_id int not null,
+        unbanned_by int default null,
+        unban_reason varchar(128) default null,
+        created_at int not null,
+        end_at int not null,
+        updated_at int not null,
+        deleted_at int default null,
+        foreign key (admin_id) references iks_admins(id),
+        foreign key (unbanned_by) references iks_admins(id),
+        foreign key (server_id) references iks_servers(id),
+        index `idx_steam_id` (`steam_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+    create table if not exists iks_admins_warns(
+        id int not null auto_increment primary key,
+        admin_id int not null,
+        target_id int not null,
+        duration int not null,
+        reason varchar(128) not null,
+        created_at int not null,
+        end_at int not null,
+        updated_at int not null,
+        deleted_at int default null,
+        deleted_by int default null,
+        foreign key (admin_id) references iks_admins(id),
+        foreign key (target_id) references iks_admins(id),
+        foreign key (deleted_by) references iks_admins(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+    create table if not exists iks_groups_limitations( 
+        id int not null auto_increment primary key,
+        group_id int not null,
+        limitation_key varchar(64) not null,
+        limitation_value varchar(32) not null,
+        foreign key (group_id) references iks_groups(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
+        ";
+
+        Console.WriteLine("Start updating");
+        Console.WriteLine(DBConnString);
+        await using var conn = new MySqlConnection(DBConnString);
+        await conn.OpenAsync();
         foreach (var server in Config.CompareServerIds)
         {
-            await CreateServer(server.Value);
+            importSqlString += GetSqlWithParameters(@"insert into iks_servers(id, ip, name, rcon, created_at, updated_at)
+                values(@serverId, @ip, @name, @rcon, unix_timestamp(), unix_timestamp());", new {
+                    serverId = server.Value.Id,
+                    ip = server.Value.Ip,
+                    name = server.Value.Name,
+                    rcon = server.Value.Rcon
+                }) + "\n";
         }
         Console.WriteLine("Getting old admins");
         var oldAdmins = await GetOldAdmins();
@@ -307,7 +427,6 @@ public static class Program
             counter++;
         }
 
-        var importSqlString = "";
         // Добавление всего этого в базу данных
         Console.WriteLine("Construct groups sql");
         foreach (var group in newGroups)
@@ -353,7 +472,7 @@ public static class Program
             importSqlString += GetSqlWithParameters(@"
             insert into iks_admin_to_server(admin_id, server_id)
             values
-            (@adminId, @serverId)
+            (@adminId, @serverId);
             ", new {adminId = ats.AdminId, serverId = ats.ServerId}) + "\n";
         }
 
@@ -427,7 +546,7 @@ public static class Program
             await conn.OpenAsync();
             await conn.QueryAsync(@"
                 insert into iks_servers(id, ip, name, rcon, created_at, updated_at)
-                values(@serverId, @ip, @name, @rcon, unix_timestamp(), unix_timestamp())
+                values(@serverId, @ip, @name, @rcon, unix_timestamp(), unix_timestamp());
             ", new {
                 serverId = server.Id,
                 ip = server.Ip,
@@ -458,7 +577,7 @@ public static class Program
             end as end,
             group_id as groupId,
             server_id as serverId
-            from old_iks_admins
+            from iks_admins
             ")).ToList();
         }
         catch (MySqlException e)
@@ -481,7 +600,7 @@ public static class Program
             flags as flags,
             immunity as immunity,
             id as id
-            from old_iks_groups
+            from iks_groups
             ")).ToList();
         }
         catch (MySqlException e)
@@ -514,7 +633,7 @@ public static class Program
             Unbanned as unbanned,
             UnbannedBy as unbannedBy,
             id as id
-            from old_iks_bans
+            from iks_bans
             ", new {timeNow = DateTimeOffset.UtcNow.ToUnixTimeSeconds()});
             
             return bans.ToList();
@@ -544,7 +663,7 @@ public static class Program
             Unbanned as unbanned,
             UnbannedBy as unbannedBy,
             id as id
-            from old_iks_mutes
+            from iks_mutes
             ", new {timeNow = DateTimeOffset.UtcNow.ToUnixTimeSeconds()});
             
             return mutes.ToList();
@@ -574,7 +693,7 @@ public static class Program
             Unbanned as unbanned,
             UnbannedBy as unbannedBy,
             id as id
-            from old_iks_gags
+            from iks_gags
             ", new {timeNow = DateTimeOffset.UtcNow.ToUnixTimeSeconds()});
             
             return gags.ToList();
@@ -592,115 +711,7 @@ public static class Program
             using var conn = new MySqlConnection(DBConnString);
             await conn.OpenAsync();
             await conn.QueryAsync(@"
-    create table if not exists iks_servers(
-        id int not null unique,
-        ip varchar(32) not null comment 'ip:port',
-        name varchar(64) not null,
-        rcon varchar(128) default null,
-        created_at int not null,
-        updated_at int not null,
-        deleted_at int default null
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-    create table if not exists iks_groups(
-        id int not null auto_increment primary key,
-        name varchar(64) not null unique,
-        flags varchar(32) not null,
-        immunity int not null,
-        comment varchar(255) default null
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-    create table if not exists iks_admins(
-        id int not null auto_increment primary key,
-        steam_id varchar(17) not null,
-        name varchar(64) not null,
-        flags varchar(32) default null,
-        immunity int default null,
-        group_id int default null,
-        discord varchar(64) default null,
-        vk varchar(64) default null,
-        is_disabled int(1) not null default 0,
-        end_at int null,
-        created_at int not null,
-        updated_at int not null,
-        deleted_at int default null,
-        foreign key (group_id) references iks_groups(id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-    insert into iks_admins(steam_id, name, flags, immunity, created_at, updated_at)
-    select 'CONSOLE', 'CONSOLE', null, 0, unix_timestamp(), unix_timestamp();
-
-    create table if not exists iks_admin_to_server(
-        id int not null auto_increment primary key,
-        admin_id int not null,
-        server_id int not null,
-        foreign key (admin_id) references iks_admins(id),
-        foreign key (server_id) references iks_servers(id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-    create table if not exists iks_comms(
-        id int not null auto_increment primary key,
-        steam_id bigint not null,
-        ip varchar(32),
-        name varchar(128),
-        mute_type int not null comment '0 - voice(mute), 1 - chat(gag), 2 - both(silence)', 
-        duration int not null,
-        reason varchar(128) not null,
-        server_id int default null,
-        admin_id int not null,
-        unbanned_by int default null,
-        unban_reason varchar(128) default null,
-        created_at int not null,
-        end_at int not null,
-        updated_at int not null,
-        deleted_at int default null,
-        foreign key (admin_id) references iks_admins(id),
-        foreign key (unbanned_by) references iks_admins(id),
-        foreign key (server_id) references iks_servers(id),
-        index `idx_steam_id` (`steam_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-    create table if not exists iks_bans(
-        id int not null auto_increment primary key,
-        steam_id bigint,
-        ip varchar(32),
-        name varchar(128),
-        duration int not null,
-        reason varchar(128) not null,
-        ban_type tinyint not null default 0 comment '0 - SteamId, 1 - Ip, 2 - Both',
-        server_id int default null,
-        admin_id int not null,
-        unbanned_by int default null,
-        unban_reason varchar(128) default null,
-        created_at int not null,
-        end_at int not null,
-        updated_at int not null,
-        deleted_at int default null,
-        foreign key (admin_id) references iks_admins(id),
-        foreign key (unbanned_by) references iks_admins(id),
-        foreign key (server_id) references iks_servers(id),
-        index `idx_steam_id` (`steam_id`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-    create table if not exists iks_admins_warns(
-        id int not null auto_increment primary key,
-        admin_id int not null,
-        target_id int not null,
-        duration int not null,
-        reason varchar(128) not null,
-        created_at int not null,
-        end_at int not null,
-        updated_at int not null,
-        deleted_at int default null,
-        deleted_by int default null,
-        foreign key (admin_id) references iks_admins(id),
-        foreign key (target_id) references iks_admins(id),
-        foreign key (deleted_by) references iks_admins(id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
-    create table if not exists iks_groups_limitations( 
-        id int not null auto_increment primary key,
-        group_id int not null,
-        limitation_key varchar(64) not null,
-        limitation_value varchar(32) not null,
-        foreign key (group_id) references iks_groups(id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
                 ");
             }
             catch (MySqlException e)
