@@ -113,13 +113,6 @@ public static class Program
         await using var conn = new MySqlConnection(DBConnString);
         await conn.OpenAsync();
         Console.WriteLine("Rename old tables...");
-        // await conn.QueryAsync(@"
-        // rename table old_iks_admins to iks_admins;
-        // rename table old_iks_gags to iks_gags;
-        // rename table old_iks_mutes to iks_mutes;
-        // rename table old_iks_groups to iks_groups;
-        // rename table old_iks_bans to iks_bans;
-        // ");
         await conn.QueryAsync(@"
         rename table iks_admins to old_iks_admins;
         rename table iks_gags to old_iks_gags;
