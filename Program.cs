@@ -51,7 +51,16 @@ public static class Program
             ReadOrCreateConfig();
             OnConfigParsed();
             Task.Run(async () => {
-                await Update();
+                try
+                {
+                    await Update();
+                }
+                catch (System.Exception e)
+                {
+                    Console.WriteLine(e.Message);
+                    throw;
+                }
+                
             });
             Console.ReadKey();
         }
@@ -289,7 +298,7 @@ public static class Program
                 oldAdmin.Immunity == -1 ? null : oldAdmin.Immunity
                 );
             newAdmins.Add(newAdmin);
-            newAdmin.EndAt = oldAdmin.End;
+            newAdmin.EndAt = oldAdmin.End == 0 ? null : oldAdmin.End;
             newAdmin.Id = oldAdmin.Id;
             if (newAdmin.Id > biggerId)
             {
@@ -322,6 +331,7 @@ public static class Program
             {
                 var deletedAdmin = new Admin(oldBan.AdminSid, "DELETED", null, null, null, null, null, null);
                 deletedAdmin.DeletedAt = AdminUtils.CurrentTimestamp();
+                biggerId++;
                 deletedAdmin.Id = biggerId++;
                 newAdmins.Add(deletedAdmin);
             }
