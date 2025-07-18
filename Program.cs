@@ -170,7 +170,7 @@ public static class Program
     create table if not exists iks_admin_to_server(
         id int not null auto_increment primary key,
         admin_id int not null,
-        server_id int not null,
+        server_id int,
         foreign key (admin_id) references iks_admins(id),
         foreign key (server_id) references iks_servers(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -305,14 +305,14 @@ public static class Program
                 biggerId = newAdmin.Id+1;
             }
             newAdmin.GroupId = oldAdmin.GroupId == -1 ? null : oldAdmin.GroupId;
+            
+            
             if (oldAdmin.ServerId == "")
             {
-                foreach (var s in Config.CompareServerIds)
-                {
-                    adminToServers.Add(new AdminToServer(newAdmin.Id, s.Value.Id));
-                }
+                adminToServers.Add(new AdminToServer(newAdmin.Id, null));
                 continue;
             }
+            
             var serverIds = oldAdmin.ServerId.Split(";");
             foreach (var oldSid in serverIds)
             {
@@ -337,7 +337,11 @@ public static class Program
             }
             int adminId = AdminId(oldBan.AdminSid, ServerId(oldBan.ServerId));
             int? unbannedBy = oldBan.UnbannedBy == null ? null : AdminId(oldBan.UnbannedBy, ServerId(oldBan.ServerId));
-            var ip = oldBan.Ip.ToLower().Trim() is "undefined" or "" ? null : oldBan.Ip.Split(":")[0];
+            string? ip = null;
+            if (oldBan.Ip != null)
+            {
+                ip = oldBan.Ip.ToLower().Trim() is "undefined" or "" ? null : oldBan.Ip.Split(":")[0];
+            }
             var ban = new PlayerBan(
                 oldBan.Id,
                 oldBan.Sid.ToLower() == "undefined" ? null : long.TryParse(oldBan.Sid, out var steamID) ? steamID : null,
@@ -542,7 +546,7 @@ public static class Program
         File.WriteAllText("./import.sql", importSqlString);
         Console.WriteLine("READY!");
         }
-        catch (MySqlException e)
+        catch (Exception e)
         {
             throw new Exception(e.ToString());
         }

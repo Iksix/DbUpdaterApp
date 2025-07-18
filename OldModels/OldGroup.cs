@@ -6,7 +6,7 @@ public class OldGroup
     public string Name { get; set; }
     public int Immunity { get; set; }
 
-    public OldGroup(string name, string flags, int immunity, int id = 1)
+    public OldGroup(string name, string flags, int immunity, int id)
     {
         Flags = flags;
         Name = name;
